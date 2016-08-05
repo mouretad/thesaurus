@@ -22,14 +22,14 @@
 #include <math.h>
 #include <glib-2.0/glib.h>
 #include <string.h>
-#include <pthread.h>
+//#include <pthread.h>
 
-//#include <iostream>
 #include <time.h>
+#include <omp.h>
 
 #include "util.h"
 
-#define DEFAULT_NUMBER_THREADS 1
+//#define DEFAULT_NUMBER_THREADS 1
 
 GHashTable *t_dict;
 GHashTable *c_dict;
@@ -41,7 +41,7 @@ int idc_c = 0;
 int nb_targets = 0; //Number of target words, used only for verbosing info
 GHashTableIter iter_t;
 pthread_mutex_t iter_mutex = PTHREAD_MUTEX_INITIALIZER;
-int nb_threads = DEFAULT_NUMBER_THREADS, pair_counter = 0;
+int pair_counter = 0; //nb_threads = DEFAULT_NUMBER_THREADS,
 int finish = FALSE; 
 
 
@@ -175,6 +175,7 @@ void update_count() {
 /******************************************************************************/
 
 void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
+  //int i =0;
   double count_t_c;
   gpointer key_c, value_t_c;
   word_count *casted_c;
@@ -182,15 +183,26 @@ void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
   g_hash_table_iter_init( &iter_c, casted_t->links );
   casted_t->entropy = calculate_entropy(casted_t->count, casted_t->links);
   while( g_hash_table_iter_next( &iter_c, &key_c, &value_t_c ) ){
+  //omp_set_dynamic(0);
+  //omp_set_num_threads(4);
+  //#pragma omp parallel for
+  //for( i = 0; i < g_hash_table_size(casted_t -> links); i++ ){
+    //#pragma omp critical
+    //{
+      //g_hash_table_iter_next( &iter_c, &key_c, &value_t_c );
     casted_c = g_hash_table_lookup( c_dict, key_c );
     count_t_c = *((double *)value_t_c);
     calculate_and_print_am( (int *)key_t, casted_t->id, (int *)key_c, 
                       casted_c->id, count_t_c, casted_t->count, casted_c->count, 
                       casted_t->entropy, casted_c->entropy );
+    //}
+    //perra("thread num: %d\n", omp_get_num_threads());
   }
+  //perra("i: %d\n", i);
+  //perra( "taille_t: %d\n", g_hash_table_size(casted_t -> links) );
 }
 /******************************************************************************/
-void *calculate_ams_all() {
+/*void *calculate_ams_all() {
   int stop = FALSE;
   gpointer value_t, key_t;
   while( TRUE ) {
@@ -205,11 +217,11 @@ void *calculate_ams_all() {
   }
   return NULL;
 }
-
+*/
 /******************************************************************************/
 
 int main( int argc, char *argv[] ) {
-
+  int i = 0;
   word_count *casted_c;
   GHashTableIter iter_c;
   //int *id_t, *id_c; 
@@ -219,18 +231,19 @@ int main( int argc, char *argv[] ) {
   struct timeval tbegin, tend;
   double texec = 0; 
 
-  //Start time
-  gettimeofday(&tbegin,NULL);
-
   if( argc != 2 ) { usage(); }
-  perr( "Reading input file into hashmap...\n" );
+  //perr( "Reading input file into hashmap...\n" );
   read_input_file( argv[1] ); 
 
   // File header
-  perr( "Calculating association scores...\n" );
-  printf( "target\tid_target\tcontext\tid_context\tf_tc\tf_t\tf_c\t" );
-  printf( "cond_prob\tpmi\tnpmi\tlmi\ttscore\tzscore\tdice\tchisquare\t" );
-  printf( "loglike\taffinity\tentropy_target\tentropy_context\n" );
+  //perr( "Calculating association scores...\n" );
+  //printf( "target\tid_target\tcontext\tid_context\tf_tc\tf_t\tf_c\t" );
+  //printf( "cond_prob\tpmi\tnpmi\tlmi\ttscore\tzscore\tdice\tchisquare\t" );
+  //printf( "loglike\taffinity\tentropy_target\tentropy_context\n" );
+
+  //Start time
+  gettimeofday(&tbegin,NULL);
+
   // First calculate all entropies for contexts
   g_hash_table_iter_init( &iter_c, c_dict );
   while( g_hash_table_iter_next( &iter_c, &key_c, &value_t_c ) ){
@@ -240,18 +253,25 @@ int main( int argc, char *argv[] ) {
 
   g_hash_table_iter_init( &iter_t, t_dict );
   nb_targets = g_hash_table_size( t_dict );
-  if( nb_threads > 1 ) {
+  /*if( nb_threads > 1 ) {
     run_multi_threaded( &calculate_ams_all, nb_threads );
   }
-  else {
-    while( g_hash_table_iter_next( &iter_t, &key_t, &value_t ) ){
-      calculate_ams_all_serial( (word_count *)value_t, key_t );
-      update_count();
+  else {*/
+  omp_set_dynamic(0);
+  omp_set_num_threads(4);
+  // while( g_hash_table_iter_next( &iter_t, &key_t, &value_t ) ){
+  #pragma omp parallel for
+  for( i = 0; i < g_hash_table_size(t_dict); i++ ){
+    #pragma omp critical
+    {
+    g_hash_table_iter_next( &iter_t, &key_t, &value_t );
+    calculate_ams_all_serial( (word_count *)value_t, key_t );
     }
+    update_count();
   }
-  
+
   // Clean and free to avoid memory leaks
-  perr( "Finished, cleaning up...\n" );
+  //perr( "Finished, cleaning up...\n" );
   g_hash_table_destroy( t_dict );
   g_hash_table_destroy( c_dict );
   // MUST be last to be destroyed, otherwise will destroy keys in previous dicts 
@@ -259,17 +279,29 @@ int main( int argc, char *argv[] ) {
   g_hash_table_destroy( symbols_dict );   
   g_hash_table_destroy( inv_symbols_dict ); // no effect  
   
-  perra( "Number of targets: %d\n", idc_t );
-  perra( "Number of contexts: %d\n", idc_c );
-  perr( "You can now calculate similarities with command below\n");
-  perr( "  ./calculate_similarity [OPTIONS] <out-file>\n\n" );
-
+  //perra( "Number of targets: %d\n", idc_t );
+  //perra( "Number of contexts: %d\n", idc_c );
+  //perr( "You can now calculate similarities with command below\n");
+  //perr( "  ./calculate_similarity [OPTIONS] <out-file>\n\n" );
+  
   //End timer
   gettimeofday(&tend,NULL);
   //Compute execution time
   texec=((double)(1000*(tend.tv_sec - tbegin.tv_sec) + ((tend.tv_usec - tbegin.tv_usec)/1000)))/1000.;
-  perra("Le temps d'execution est de:%f\n", texec);
+  
+  FILE* fichier = NULL;
+ 
+  fichier = fopen("test.txt", "w");
+ 
+  if (fichier != NULL){
+    fprintf(fichier, "%f\n", texec);
+    fclose(fichier);
+  }
   return 0;
+ 
+
+  //perra("Le temps d'execution est de:%f\n", texec);
+  //return 0;
 }
 
 /******************************************************************************/

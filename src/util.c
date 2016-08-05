@@ -213,7 +213,7 @@ void insert_into_index( GHashTable *hash, GHashTable *symbols,
 void run_multi_threaded( void *function, int nb_threads ) {
   int i;
   pthread_t *threadpool;
-  perr( "Multi-threaded version\n" );
+  //perr( "Multi-threaded version\n" );
   threadpool = malloc( sizeof( pthread_t ) * nb_threads );
   for( i = 0; i < nb_threads; i++ ) {
     //fprintf( stderr, "Creating thread %d\n", i );  
