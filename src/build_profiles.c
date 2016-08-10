@@ -162,7 +162,7 @@ double calculate_entropy( double total, GHashTable *distribution ) {
 }
 
 /******************************************************************************/
-
+/*
 void update_count() {
   int p;
   if( pair_counter % 100 == 0 ) {
@@ -171,11 +171,10 @@ void update_count() {
   }
   pair_counter++;
 }
-
+*/
 /******************************************************************************/
 
 void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
-  //int i =0;
   double count_t_c;
   gpointer key_c, value_t_c;
   word_count *casted_c;
@@ -183,23 +182,12 @@ void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
   g_hash_table_iter_init( &iter_c, casted_t->links );
   casted_t->entropy = calculate_entropy(casted_t->count, casted_t->links);
   while( g_hash_table_iter_next( &iter_c, &key_c, &value_t_c ) ){
-  //omp_set_dynamic(0);
-  //omp_set_num_threads(4);
-  //#pragma omp parallel for
-  //for( i = 0; i < g_hash_table_size(casted_t -> links); i++ ){
-    //#pragma omp critical
-    //{
-      //g_hash_table_iter_next( &iter_c, &key_c, &value_t_c );
     casted_c = g_hash_table_lookup( c_dict, key_c );
     count_t_c = *((double *)value_t_c);
     calculate_and_print_am( (int *)key_t, casted_t->id, (int *)key_c, 
                       casted_c->id, count_t_c, casted_t->count, casted_c->count, 
                       casted_t->entropy, casted_c->entropy );
-    //}
-    //perra("thread num: %d\n", omp_get_num_threads());
   }
-  //perra("i: %d\n", i);
-  //perra( "taille_t: %d\n", g_hash_table_size(casted_t -> links) );
 }
 /******************************************************************************/
 /*void *calculate_ams_all() {
@@ -218,14 +206,16 @@ void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
   return NULL;
 }
 */
+
 /******************************************************************************/
 
 int main( int argc, char *argv[] ) {
-  int i = 0;
+  int i,j = 0;
+  guint size_of_table = 0;
   word_count *casted_c;
   GHashTableIter iter_c;
   //int *id_t, *id_c; 
-  gpointer key_c, value_t_c, value_t, key_t; 
+  gpointer key_c, value_t_c, value_t; //, key_t; 
 
   //Timer variables
   struct timeval tbegin, tend;
@@ -251,23 +241,23 @@ int main( int argc, char *argv[] ) {
     casted_c->entropy = calculate_entropy(casted_c->count, casted_c->links);      
   }
 
+  //initialisation of the target_hash_map
   g_hash_table_iter_init( &iter_t, t_dict );
   nb_targets = g_hash_table_size( t_dict );
-  /*if( nb_threads > 1 ) {
-    run_multi_threaded( &calculate_ams_all, nb_threads );
-  }
-  else {*/
-  omp_set_dynamic(0);
-  omp_set_num_threads(4);
-  // while( g_hash_table_iter_next( &iter_t, &key_t, &value_t ) ){
-  #pragma omp parallel for
-  for( i = 0; i < g_hash_table_size(t_dict); i++ ){
-    #pragma omp critical
-    {
-    g_hash_table_iter_next( &iter_t, &key_t, &value_t );
-    calculate_ams_all_serial( (word_count *)value_t, key_t );
+  size_of_table = g_hash_table_size( t_dict );
+
+  //creation and initialisation of a target_array
+  gpointer *array_t;
+  array_t = g_hash_table_get_keys_as_array (t_dict, &size_of_table);
+
+  #pragma omp parallel shared(t_dict)
+  {
+    //association between keys and values
+    #pragma omp for private(j,value_t)    
+    for( j=0; j < size_of_table; j++ ){
+      value_t = g_hash_table_lookup(t_dict, array_t[j]);
+      calculate_ams_all_serial((word_count *)value_t, array_t[j]);
     }
-    update_count();
   }
 
   // Clean and free to avoid memory leaks
