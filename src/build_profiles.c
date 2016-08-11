@@ -161,7 +161,7 @@ void calculate_and_print_am( int *w1, int idw1, int *w2, int idw2,
   //printf("%s", buffer_tmp);
   
   
-  if /*( (msg >= 0) &&*/ (*index + msg < buffer_size) /*&& (buffer_size > 0) )*/ {
+  if ( (msg >= 0) && (*index + msg < buffer_size) && (buffer_size > 0) ) {
     msg = sprintf ( buffer + *index, "%s", buffer_tmp);
     *index += msg;
   }
@@ -288,11 +288,12 @@ int main( int argc, char *argv[] ) {
     buffer[0] = '\0';
     int index=0;
     //association between keys and values
-    #pragma omp for private(i,value_t, buffer)    
+    #pragma omp for private(i,value_t)    
     for( i=0; i < size_of_table; i++ ){
       value_t = g_hash_table_lookup(t_dict, array_t[i]);      
       calculate_ams_all_serial((word_count *)value_t, array_t[i], buffer, &index);
     }
+    // verification of the contents of buffers (they must be empty)
     if(index > 0){
       printf("%s", buffer);
     }
