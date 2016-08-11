@@ -44,6 +44,7 @@ pthread_mutex_t iter_mutex = PTHREAD_MUTEX_INITIALIZER;
 int pair_counter = 0; //nb_threads = DEFAULT_NUMBER_THREADS,
 int finish = FALSE; 
 
+int buffer_size = 16*1024;
 
 /******************************************************************************/
 
@@ -115,7 +116,12 @@ double expected( double cw1, double cw2, double n ) {
 
 void calculate_and_print_am( int *w1, int idw1, int *w2, int idw2, 
                              double cw1w2, double cw1, double cw2, 
-                             double t_entropy, double c_entropy ) {
+                             double t_entropy, double c_entropy, char buffer[], int *index ) {
+
+  char buffer_tmp[400];
+  buffer_tmp[0] = '\0';
+  int msg = 0;
+
   int cw1nw2 = cw1 - cw1w2,
       cnw1w2 = cw2 - cw1w2,
       cnw1nw2 = n_pairs - cw1 - cw2 + cw1w2;                             
@@ -141,9 +147,33 @@ void calculate_and_print_am( int *w1, int idw1, int *w2, int idw2,
          am_affinity = 0.5 * ( cw1w2 / cw1 + cw1w2 / cw2 ) ;
   char *w1s = g_hash_table_lookup( inv_symbols_dict, w1 );
   char *w2s = g_hash_table_lookup( inv_symbols_dict, w2 );
+
+  /*
   printf( "%s\t%d\t%s\t%d\t%.2lf\t%.2lf\t%.2lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", 
           w1s, idw1, w2s, idw2, cw1w2, cw1, cw2, am_cp, am_pmi, am_npmi, am_lmi, am_tscore, 
           am_zscore, am_dice , am_chisquare, am_loglike, am_affinity, t_entropy, c_entropy );
+  */
+  
+  msg = sprintf ( buffer_tmp, "%s\t%d\t%s\t%d\t%.2lf\t%.2lf\t%.2lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\t%lf\n", 
+        w1s, idw1, w2s, idw2, cw1w2, cw1, cw2, am_cp, am_pmi, am_npmi, am_lmi, am_tscore, 
+        am_zscore, am_dice , am_chisquare, am_loglike, am_affinity, t_entropy, c_entropy );
+
+  //printf("%s", buffer_tmp);
+  
+  
+  if /*( (msg >= 0) &&*/ (*index + msg < buffer_size) /*&& (buffer_size > 0) )*/ {
+    msg = sprintf ( buffer + *index, "%s", buffer_tmp);
+    *index += msg;
+  }
+  else {
+    //fprintf(stderr, "%s\n", w1s);
+    printf("%s",buffer);
+    //printf("%s",buffer_tmp );
+    *index = 0;
+    buffer[0]='\0';
+    msg = sprintf ( buffer, "%s", buffer_tmp);
+    *index += msg;
+  }
 }
 
 /******************************************************************************/
@@ -174,7 +204,7 @@ void update_count() {
 */
 /******************************************************************************/
 
-void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
+void calculate_ams_all_serial( word_count *casted_t, gpointer key_t, char buffer[], int *index) {
   double count_t_c;
   gpointer key_c, value_t_c;
   word_count *casted_c;
@@ -186,7 +216,7 @@ void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
     count_t_c = *((double *)value_t_c);
     calculate_and_print_am( (int *)key_t, casted_t->id, (int *)key_c, 
                       casted_c->id, count_t_c, casted_t->count, casted_c->count, 
-                      casted_t->entropy, casted_c->entropy );
+                      casted_t->entropy, casted_c->entropy, buffer, index);
   }
 }
 /******************************************************************************/
@@ -210,8 +240,9 @@ void calculate_ams_all_serial( word_count *casted_t, gpointer key_t ) {
 /******************************************************************************/
 
 int main( int argc, char *argv[] ) {
-  int i,j = 0;
+  int i = 0;
   guint size_of_table = 0;
+
   word_count *casted_c;
   GHashTableIter iter_c;
   //int *id_t, *id_c; 
@@ -252,11 +283,18 @@ int main( int argc, char *argv[] ) {
 
   #pragma omp parallel shared(t_dict)
   {
+    //creation of one buffer for each thread
+    char buffer[buffer_size];
+    buffer[0] = '\0';
+    int index=0;
     //association between keys and values
-    #pragma omp for private(j,value_t)    
-    for( j=0; j < size_of_table; j++ ){
-      value_t = g_hash_table_lookup(t_dict, array_t[j]);
-      calculate_ams_all_serial((word_count *)value_t, array_t[j]);
+    #pragma omp for private(i,value_t, buffer)    
+    for( i=0; i < size_of_table; i++ ){
+      value_t = g_hash_table_lookup(t_dict, array_t[i]);      
+      calculate_ams_all_serial((word_count *)value_t, array_t[i], buffer, &index);
+    }
+    if(index > 0){
+      printf("%s", buffer);
     }
   }
 
@@ -288,10 +326,7 @@ int main( int argc, char *argv[] ) {
     fclose(fichier);
   }
   return 0;
- 
 
-  //perra("Le temps d'execution est de:%f\n", texec);
-  //return 0;
 }
 
 /******************************************************************************/
