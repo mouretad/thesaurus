@@ -1,0 +1,6 @@
+About the tests:
+
+- All the tests have been performed with the input file "test_5go.txt.s.filter.t10.c10.tc2.u" 
+  which corresponds to a 5GB file before filtering.
+- The execution time don't take in consideration the intialising part of the code.
+- Each test has been performed on Digitalis (grimage9)
